@@ -1,0 +1,6 @@
+theme: jekyll-theme-minimal
+title: FGFR1 ITD Seeker
+description: Algorithmic description of the usage of VarDict to detect FGFR1 internal tandem duplications (ITDs) from NGS short read data.
+author: Somak Roy
+baseurl: "/fgfr1-itd-seeker"
+url: "https://somakroy.github.io"
