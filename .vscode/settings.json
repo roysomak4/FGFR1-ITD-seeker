@@ -1,0 +1,8 @@
+{
+    "editor.fontVariations": false,
+    "editor.wordWrap": "on",
+    "[makefile]": {
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false
+    }
+}
