@@ -4,5 +4,6 @@
     "[makefile]": {
         "editor.insertSpaces": false,
         "editor.detectIndentation": false
-    }
+    },
+    "makefile.configureOnOpen": false
 }

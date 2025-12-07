@@ -16,14 +16,14 @@ build-all:
 # Production build (optimized, smaller) for current platform
 .PHONY: build-release
 build-release:
-	go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BINARY_NAME) main.go
+	go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME) main.go
 
 # Build release binaries for all platforms
 .PHONY: build-release-all
 build-release-all:
-	GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BINARY_NAME)-$(VERSION)-darwin-amd64 main.go
-	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BINARY_NAME)-$(VERSION)-darwin-arm64 main.go
-	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BINARY_NAME)-$(VERSION)-linux-amd64 main.go
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME)-$(VERSION)-darwin-amd64 main.go
+	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME)-$(VERSION)-darwin-arm64 main.go
+	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME)-$(VERSION)-linux-amd64 main.go
 
 .PHONY: install
 install:
