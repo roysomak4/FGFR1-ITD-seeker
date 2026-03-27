@@ -37,10 +37,11 @@ RUN apk update && apk add --no-cache --virtual build_deps \
         && ln -s /usr/local/vardict_app/bin/VarDict /usr/local/bin/vardict \
         && ln -s /usr/local/vardict_app/bin/var2vcf_valid.pl /usr/local/bin/var2vcf_valid.pl \
         && ln -s /usr/local/vardict_app/bin/var2vcf_paired.pl /usr/local/bin/var2vcf_paired.pl \
+        && ln -s /usr/local/vardict_app/bin/teststrandbias.R /usr/local/bin/teststrandbias.R \
+        && ln -s /usr/local/vardict_app/bin/testsomatic.R /usr/local/bin/testsomatic.R \
         # clean up install mess
         && apk del build_deps \
         && rm -rf /var/cache/apk/*
 
 # Copy the compiled binary from builder stage
 COPY --from=builder /build/release/fgfr1-itd-seeker* /usr/local/bin/
-COPY --from=builder /build/bedfiles /usr/local/bin/

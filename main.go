@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -65,6 +64,11 @@ func main() {
     fmt.Printf("%s%s Genome version: %s%s\n", colorBlue, iconInfo, *genomeVersion, colorReset)
     fmt.Printf("%s%s Performing preflight checks...%s\n", colorYellow, iconSearch, colorReset)
 
+    cfg, ok := genomeConfigs[*genomeVersion]
+    if !ok {
+        log.Fatalf("Unsupported genome version %q. Supported versions: hg19, hg38", *genomeVersion)
+    }
+
     if err := validateFileExists(*refGenome, "reference genome"); err != nil {
         log.Fatal(err)
     }
@@ -79,38 +83,22 @@ func main() {
         log.Fatal(err)
     }
     fmt.Printf("%s%s BAM index file confirmed%s\n", colorGreen, iconCheck, colorReset)
-    // FGFR1 gene BED file for variant calling
-    bedFile := filepath.Join("bedfiles", *genomeVersion, "FGFR1_gene.bed")
-    if err := validateFileExists(bedFile, "BED file"); err != nil {
-        log.Fatal(err)
-    }
-    fmt.Printf("%s%s FGFR1 gene BED file confirmed%s\n", colorGreen, iconCheck, colorReset)
     fmt.Printf("%s%s Preflight checks passed%s\n", colorGreen, iconCheck, colorReset)
-    // ----------------------------------------
-    fmt.Printf("%s%s Loading FGFR1 breakpoint exon coordinates...%s\n", colorBlue, iconInfo, colorReset)
-    // Load exon coordinates from BED file for validating FGFR1 ITD breakpoints
-    exonCoordsBedFile := filepath.Join("bedfiles", *genomeVersion, "FGFR1_ITD_breakpoint_exons.bed")
-    if err := validateFileExists(exonCoordsBedFile, "exon coordinates BED file"); err != nil {
-        log.Fatal(err)
-    }
-    exonCoords, err := loadExonCoordinates(exonCoordsBedFile)
-    if err != nil {
-        log.Fatalf("Failed to load exon coordinates: %v", err)
-    }
-    fmt.Printf("%s%s Loaded exon coordinates%s\n", colorGreen, iconCheck, colorReset)
+
+    fmt.Printf("%s%s FGFR1 breakpoint exon coordinates loaded (embedded, %s)%s\n", colorGreen, iconCheck, *genomeVersion, colorReset)
 
     const minSVAltlen = 7000
     const nucleotideExtnLen = 6000
     intermediateVCF := "/tmp/vardict_raw_output.vcf"
 
     fmt.Printf("%s%s Running vardict command...%s\n", colorCyan, iconSearch, colorReset)
-    command := fmt.Sprintf(`~/biotools/vardict -G %s -f %f -r 4 -o 1.5 -th %d -L %d -x %d -N %s -b %s -c 1 -S 2 -E 3 -g 4 %s | ~/biotools/vardict_app/bin/teststrandbias.R | ~/biotools/vardict_app/bin/var2vcf_valid.pl -A -N %s -E -f %f >%s`, *refGenome, *minVaf, *threads, minSVAltlen, nucleotideExtnLen, *sampleName, *inputBam, bedFile, *sampleName, *minVaf, intermediateVCF)
+    command := fmt.Sprintf(`vardict -G %s -f %f -r 4 -o 1.5 -th %d -L %d -x %d -N %s -b %s -R %s | teststrandbias.R | var2vcf_valid.pl -A -N %s -E -f %f >%s`, *refGenome, *minVaf, *threads, minSVAltlen, nucleotideExtnLen, *sampleName, *inputBam, cfg.vardictRegion, *sampleName, *minVaf, intermediateVCF)
     runBashCommand(command)
     fmt.Printf("%s%s Finished running vardict command%s\n", colorGreen, iconCheck, colorReset)
-    
+
     // Filter VCF for FGFR1 ITD variants
     fmt.Printf("%s%s Filtering VCF for FGFR1 ITD variants...%s\n", colorCyan, iconSearch, colorReset)
-    if err := filterVCFForITD(intermediateVCF, *outputVcf, exonCoords); err != nil {
+    if err := filterVCFForITD(intermediateVCF, *outputVcf, &cfg.exonCoords); err != nil {
         log.Fatalf("Failed to filter VCF: %v", err)
     }
     fmt.Printf("%s%s Filtered VCF written to %s%s\n", colorGreen, iconCheck, *outputVcf, colorReset)
@@ -122,62 +110,45 @@ func main() {
     }
 }
 
+// ExonCoordinates holds the breakpoint exon boundaries used for ITD filtering.
 type ExonCoordinates struct {
-	prime5Start     int
-	prime5End  int
-	prime3Start  int
-	prime3End    int
+	prime5Start int
+	prime5End   int
+	prime3Start int
+	prime3End   int
 }
 
-func loadExonCoordinates(bedFile string) (*ExonCoordinates, error) {
-	file, err := os.Open(bedFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open exon coordinates BED file: %v", err)
-	}
-	defer file.Close()
+// genomeConfig bundles the VarDict region string with the breakpoint exon coordinates
+// for a specific reference genome. Coordinates are sourced from the FGFR1 RefSeq
+// transcript NM_023110.3.
+type genomeConfig struct {
+	vardictRegion string
+	exonCoords    ExonCoordinates
+}
 
-	coords := &ExonCoordinates{}
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
-			continue // Skip comments and empty lines
-		}
-
-		fields := strings.Split(line, "\t")
-		if len(fields) < 4 {
-			continue // Skip malformed lines
-		}
-
-		exonName := strings.Split(fields[3], ";")[2]
-		start, err1 := strconv.Atoi(fields[1])
-		end, err2 := strconv.Atoi(fields[2])
-		if err1 != nil || err2 != nil {
-			continue
-		}
-
-		// Map exon names to coordinates
-		switch exonName {
-		case "exon-9-10":
-			coords.prime5Start = start
-			coords.prime5End = end
-		case "exon-18":
-			coords.prime3Start = start
-			coords.prime3End = end
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading breakpoint exon BED file: %v", err)
-	}
-
-	// Validate that all required coordinates were found
-	if coords.prime5Start == 0 || coords.prime5End == 0 || coords.prime3Start == 0 || coords.prime3End == 0 {
-		return nil, fmt.Errorf("BED file is missing required exon coordinates (exon-9-10, exon18)")
-	}
-
-	return coords, nil
+// genomeConfigs contains the embedded FGFR1 coordinates for each supported genome version.
+// Gene region: full FGFR1 gene used as the VarDict target region.
+// Exon 18 (prime3): 3' ITD breakpoint region.
+// Exon 9-10 (prime5): 5' ITD breakpoint region.
+var genomeConfigs = map[string]genomeConfig{
+	"hg38": {
+		vardictRegion: "chr8:38409143-38470635",
+		exonCoords: ExonCoordinates{
+			prime5Start: 38418217,
+			prime5End:   38419745,
+			prime3Start: 38413617,
+			prime3End:   38413814,
+		},
+	},
+	"hg19": {
+		vardictRegion: "chr8:38266661-38328153",
+		exonCoords: ExonCoordinates{
+			prime5Start: 38275735,
+			prime5End:   38277263,
+			prime3Start: 38271135,
+			prime3End:   38271332,
+		},
+	},
 }
 
 func validateFileExists(filePath, fileType string) error {
@@ -259,7 +230,7 @@ func filterVCFForITD(inputVCF, outputVCF string, exonCoords *ExonCoordinates) er
 }
 
 func runBashCommand(command string) {
-    cmd := exec.Command("bash", "-c", command)
+    cmd := exec.Command("sh", "-c", command)
     output, err := cmd.CombinedOutput()
     if err != nil {
         log.Printf("Command failed: %v\n%s", err, output)
