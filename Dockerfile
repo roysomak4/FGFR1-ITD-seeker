@@ -11,7 +11,7 @@ COPY . .
 
 # Build using Makefile
 RUN apk add --no-cache make && \
-    make build-release-all
+    make build-release
 
 # Stage 2: Create the runtime image with VarDict
 FROM eclipse-temurin:17-jre-alpine

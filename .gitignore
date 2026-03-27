@@ -32,3 +32,7 @@ go.work.sum
 # .vscode/
 release/
 .DS_Store
+
+# Claude context files used for testing and debugging
+claude_contexts/
+CLAUDE.md
