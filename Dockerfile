@@ -1,20 +1,29 @@
 # Multi-stage Dockerfile for FGFR1-ITD-seeker
 # Image: ghcr.io/cchmc-research-mgps/fgfr1-itd-seeker:<tag>
 
+# Global ARGs (must be declared before any FROM to be usable in FROM instructions)
+ARG BASE_IMAGE_TAG=21-jre-alpine-3.22
+
 # Stage 1: Build the Go application
-FROM golang:1.25-alpine AS builder
+# Use BUILDPLATFORM so Go compiles natively on the build machine (fast),
+# then cross-compiles the binary for the target platform.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+
+# Docker injects these automatically during multi-arch builds
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /build
 
 # Copy all necessary files
 COPY . .
 
-# Build using Makefile
+# Cross-compile for the target platform via GOOS/GOARCH env vars
 RUN apk add --no-cache make && \
-    make build-release
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} make build-release
 
 # Stage 2: Create the runtime image with VarDict
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:${BASE_IMAGE_TAG}
 
 LABEL maintainer="Somak Roy<roysomak4@gmail.com>" \
     function="Docker image with FGFR1-ITD-seeker" \

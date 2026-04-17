@@ -1,6 +1,8 @@
 VERSION := $(shell cat version.txt)
 BINARY_NAME := fgfr1-itd-seeker
-DOCKER_IMAGE := ghcr.io/cchmc-research-mgps/fgfr1-itd-seeker
+DOCKER_IMAGE := ghcr.io/roysomak4/fgfr1-itd-seeker
+BASE_IMAGE_TAG := 21-jre-alpine-3.22
+IMAGE_TAG := v$(VERSION)-$(BASE_IMAGE_TAG)
 
 # Development build (with debug info) for current platform
 .PHONY: build
@@ -28,22 +30,32 @@ build-release-all:
 	GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME)-$(VERSION)-darwin-arm64 main.go
 	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o release/$(BINARY_NAME)-$(VERSION)-linux-amd64 main.go
 
-# Docker build
+# Build multi-arch image locally (loads into local Docker daemon, single platform only)
+# Use this to test the image on your current machine before pushing.
 .PHONY: docker-build
 docker-build:
-	docker build -t $(DOCKER_IMAGE):$(VERSION) .
-	docker tag $(DOCKER_IMAGE):$(VERSION) $(DOCKER_IMAGE):latest
+	docker buildx build --platform linux/$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
+		--load \
+		--build-arg BASE_IMAGE_TAG=$(BASE_IMAGE_TAG) \
+		-t $(DOCKER_IMAGE):$(IMAGE_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		.
 
-# Docker build and push
+# Build multi-arch image (linux/amd64 + linux/arm64) and push to registry
+# Requires: docker buildx create --use (once per machine)
 .PHONY: docker-push
-docker-push: docker-build
-	docker push $(DOCKER_IMAGE):$(VERSION)
-	docker push $(DOCKER_IMAGE):latest
+docker-push:
+	docker buildx build --platform linux/amd64,linux/arm64 \
+		--push \
+		--build-arg BASE_IMAGE_TAG=$(BASE_IMAGE_TAG) \
+		-t $(DOCKER_IMAGE):$(IMAGE_TAG) \
+		-t $(DOCKER_IMAGE):latest \
+		.
 
 # Run docker container
 .PHONY: docker-run
 docker-run:
-	docker run --rm -v $(PWD)/testdata:/data $(DOCKER_IMAGE):$(VERSION)
+	docker run --rm -v $(PWD)/testdata:/data $(DOCKER_IMAGE):$(IMAGE_TAG)
 
 .PHONY: install
 install:
